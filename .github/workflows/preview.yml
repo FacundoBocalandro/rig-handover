@@ -1,0 +1,51 @@
+# Plan morning-digest § 3 and § 4. Saves /digest/2026-10-28 as one HTML file and deploys it to
+# GitHub Pages. The preview is never committed (ADR 0003). The banner shows the LANE_MARKER
+# secret; delete the secret and run this again to upload the page over the same link without it.
+name: preview
+
+on: workflow_dispatch
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --no-frozen-lockfile
+      - name: Save the digest page
+        env:
+          LANE_MARKER: ${{ secrets.LANE_MARKER }}
+          PORT: 8787
+        run: |
+          pnpm start &
+          for i in $(seq 30); do curl -sf localhost:8787/health >/dev/null && break; sleep 1; done
+          mkdir -p _site
+          curl -sf localhost:8787/digest/2026-10-28 -o _site/index.html
+          kill %1
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
